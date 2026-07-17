@@ -32,6 +32,16 @@ import ch.qos.logback.core.util.Duration;
  * so no stub swap can race the digest scheduler. If {@code restore()} were missing, the second
  * window would drain a zero count and never send a digest at all, failing the count assertion
  * below.
+ *
+ * <p>This test previously flaked (~1-in-2 on a slow/loaded runner) because its wait loop only
+ * checked WireMock's request journal — proof the second digest POST was RECEIVED, not proof the
+ * appender's own {@code "ntfy-alert-digest"} thread had finished consuming the response.
+ * Reproduced deterministically (via an artificial response delay): the status-code sequence was
+ * always one 500 then two 200s, with the third 200 arriving only after {@code appender.stop()} —
+ * confirming a JDK {@code HttpClient} interrupt race (not a WireMock {@code Scenario}
+ * state-transition race, which would instead have produced two 500s). {@link
+ * #httpClientStillInFlight} closes that window by waiting for the digest thread's own stack to
+ * leave the HTTP client implementation before {@code stop()} runs.
  */
 @WireMockTest
 class NtfyAlertAppenderDigestRestoreIT {
@@ -39,6 +49,7 @@ class NtfyAlertAppenderDigestRestoreIT {
   private static final int MAX_ALERTS_PER_WINDOW = 3;
   private static final int TOTAL_EVENTS = 10;
   private static final int EXPECTED_SUPPRESSED = TOTAL_EVENTS - MAX_ALERTS_PER_WINDOW; // 7
+  private static final String DIGEST_THREAD_NAME = "ntfy-alert-digest";
 
   private static ILoggingEvent errorEvent(LoggerContext context, String message) {
     // Simulated downstream-consumer logger name: NOT under io.github.pimak.logbackntfy, so it is
@@ -46,6 +57,41 @@ class NtfyAlertAppenderDigestRestoreIT {
     Logger logger = context.getLogger("com.example.testapp.SimulatedConsumer");
     return new LoggingEvent(
         NtfyAlertAppenderDigestRestoreIT.class.getName(), logger, Level.ERROR, message, null, null);
+  }
+
+  /**
+   * Finds the appender's single named digest-scheduler thread, if currently alive. Package-name
+   * lookup by thread name only — no reflection into appender internals.
+   */
+  private static Thread findThreadByName(String name) {
+    for (Thread t : Thread.getAllStackTraces().keySet()) {
+      if (name.equals(t.getName())) {
+        return t;
+      }
+    }
+    return null;
+  }
+
+  /**
+   * True while {@code thread}'s current stack still shows an HTTP-client frame, i.e. it is still
+   * inside (or blocked inside) {@code HttpClient.send()} for the digest POST — proof the response
+   * has not yet been fully consumed, unlike WireMock's request journal which only proves the
+   * request was received. Matches both the public {@code java.net.http} API package AND the JDK's
+   * actual (internal) implementation package {@code jdk.internal.net.http} — the calling thread
+   * blocks inside the latter via {@code CompletableFuture.get()}, so checking only the public
+   * package misses the in-flight state entirely. A null/dead thread (already returned to the
+   * pool's idle wait, or torn down) is never "in flight".
+   */
+  private static boolean httpClientStillInFlight(Thread thread) {
+    if (thread == null || !thread.isAlive()) {
+      return false;
+    }
+    for (StackTraceElement frame : thread.getStackTrace()) {
+      if (frame.getClassName().contains(".net.http.")) {
+        return true;
+      }
+    }
+    return false;
   }
 
   @Test
@@ -99,6 +145,22 @@ class NtfyAlertAppenderDigestRestoreIT {
                 .size()
             < 2) {
       Thread.sleep(25);
+    }
+
+    // The check above only proves WireMock RECEIVED the second digest POST — the digest
+    // scheduler thread's synchronous httpClient.send() call for that same request may still be
+    // in flight at this exact instant. Calling stop() here would race
+    // digestScheduler.shutdownNow()'s interrupt against that in-progress send(): the interrupt
+    // can land inside HttpClient even after the response already arrived, making
+    // NtfyPublisher.publish() report a spurious "interrupted" failure, which emitDigest()
+    // re-restore()s — triggering an unwanted THIRD digest flush from stop() itself. Wait until
+    // the digest thread's stack has left the HTTP client implementation (response fully
+    // consumed) before proceeding, closing the race window this test previously flaked on.
+    long consumedDeadline = System.currentTimeMillis() + 5_000;
+    Thread digestThread = findThreadByName(DIGEST_THREAD_NAME);
+    while (System.currentTimeMillis() < consumedDeadline
+        && httpClientStillInFlight(digestThread)) {
+      Thread.sleep(5);
     }
 
     appender.stop();
