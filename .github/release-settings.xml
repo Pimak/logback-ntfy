@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+    Release-time Maven settings for CI publishing.
+
+    INVARIANT: this file MUST contain ZERO literal secrets. Every credential below is
+    env-var indirected (${env.*}) and is populated only inside the ephemeral GitHub
+    Actions runner. A literal value in any credential position is a forbidden, permanent
+    public leak — treat it as a loud diff to reject.
+
+    Why hand-authored (not actions/setup-java generated): setup-java emits exactly ONE
+    credential block, but the release needs two publish targets (Central + GitHub Packages)
+    plus the GPG passphrase entry — three blocks. So setup-java runs with
+    overwrite-settings: false and release.yml copies this file to ~/.m2/settings.xml.
+-->
+<settings xmlns="http://maven.apache.org/SETTINGS/1.2.0"
+          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+          xsi:schemaLocation="http://maven.apache.org/SETTINGS/1.2.0 https://maven.apache.org/xsd/settings-1.2.0.xsd">
+    <servers>
+        <!-- Central Portal user token. id matches the pom release profile publishingServerId=central. -->
+        <server>
+            <id>central</id>
+            <username>${env.MAVEN_CENTRAL_TOKEN_USERNAME}</username>
+            <password>${env.MAVEN_CENTRAL_TOKEN_PASSWORD}</password>
+        </server>
+        <!-- GitHub Packages mirror. id matches the github-mirror profile distributionManagement repository id=github. -->
+        <server>
+            <id>github</id>
+            <username>Pimak</username>
+            <password>${env.GITHUB_TOKEN}</password>
+        </server>
+        <!-- GPG signing passphrase, consumed by maven-gpg-plugin. -->
+        <server>
+            <id>gpg.passphrase</id>
+            <passphrase>${env.MAVEN_GPG_PASSPHRASE}</passphrase>
+        </server>
+    </servers>
+</settings>
