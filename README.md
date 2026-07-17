@@ -1,5 +1,8 @@
 # logback-ntfy
 
+[![CI](https://img.shields.io/github/actions/workflow/status/Pimak/logback-ntfy/ci.yml?branch=main)](https://github.com/Pimak/logback-ntfy/actions/workflows/ci.yml)
+[![Maven Central](https://img.shields.io/maven-central/v/io.github.pimak/logback-ntfy)](https://central.sonatype.com/artifact/io.github.pimak/logback-ntfy)
+
 A zero-dependency Logback appender that publishes ERROR-level log events as [ntfy](https://ntfy.sh)
 push notifications. It is storm-resistant (rate-limited with a suppressed-count digest), loop-safe
 (never logs its own diagnostics through SLF4J), and — unlike appenders wired through your
@@ -9,19 +12,22 @@ early fatal errors are otherwise invisible.
 
 ## Install
 
-Maven coordinate: `io.github.pimak:logback-ntfy:0.1.0-SNAPSHOT`
+Maven coordinate: `io.github.pimak:logback-ntfy:0.1.0`
 
 ```xml
 <dependency>
   <groupId>io.github.pimak</groupId>
   <artifactId>logback-ntfy</artifactId>
-  <version>0.1.0-SNAPSHOT</version>
+  <version>0.1.0</version>
 </dependency>
 ```
 
 The artifact depends on nothing beyond `logback-classic`/`logback-core` (`provided` scope — you
 already have them if you use Logback) and the JDK. A dependency allowlist enforced at build time
 guarantees this promise holds for every future release.
+
+Compatibility: JDK 21+, Logback 1.5.x — see [docs/compatibility.md](docs/compatibility.md) for
+the tested version matrix.
 
 ## Quickstart
 
@@ -79,6 +85,7 @@ including the built-in `NO_ALERT` marker and the always-on self-exclusion.
 | [docs/authentication.md](docs/authentication.md) | The three auth modes (`BearerToken`, `BasicAuth`, `None`) and the "token wins" precedence rule |
 | [docs/filtering.md](docs/filtering.md) | `excludedLoggers`, the `NO_ALERT` marker, and the always-on self-exclusion |
 | [docs/troubleshooting.md](docs/troubleshooting.md) | Lookup table of every Logback `StatusManager` status line the appender emits and what to do about it |
+| [docs/compatibility.md](docs/compatibility.md) | Tested JDK/Logback versions and ntfy server API surface |
 
 ## License
 
