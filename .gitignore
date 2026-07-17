@@ -1,0 +1,17 @@
+# Maven
+target/
+
+# Flatten-maven-plugin output — plugin is not used by this build, kept as a belt-and-braces guard
+.flattened-pom.xml
+
+# IDE
+.idea/
+*.iml
+.vscode/
+.settings/
+.classpath
+.project
+
+# OS
+.DS_Store
+Thumbs.db

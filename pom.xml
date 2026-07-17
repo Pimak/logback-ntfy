@@ -1,0 +1,169 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <groupId>io.github.pimak</groupId>
+    <artifactId>logback-ntfy</artifactId>
+    <version>0.1.0-SNAPSHOT</version>
+    <packaging>jar</packaging>
+
+    <name>logback-ntfy</name>
+    <description>Zero-dependency Logback appender that publishes ERROR-level log events as ntfy push notifications.</description>
+
+    <licenses>
+        <license>
+            <name>Apache-2.0</name>
+            <url>https://www.apache.org/licenses/LICENSE-2.0.txt</url>
+        </license>
+    </licenses>
+
+    <url>https://github.com/pimak/logback-ntfy</url>
+    <scm>
+        <connection>scm:git:https://github.com/pimak/logback-ntfy.git</connection>
+        <developerConnection>scm:git:https://github.com/pimak/logback-ntfy.git</developerConnection>
+        <url>https://github.com/pimak/logback-ntfy</url>
+    </scm>
+
+    <properties>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <logback.version>1.5.38</logback.version>
+    </properties>
+
+    <dependencies>
+        <dependency>
+            <groupId>ch.qos.logback</groupId>
+            <artifactId>logback-classic</artifactId>
+            <version>${logback.version}</version>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>ch.qos.logback</groupId>
+            <artifactId>logback-core</artifactId>
+            <version>${logback.version}</version>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <version>6.1.2</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.assertj</groupId>
+            <artifactId>assertj-core</artifactId>
+            <version>3.27.7</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.wiremock</groupId>
+            <artifactId>wiremock-standalone</artifactId>
+            <version>3.13.2</version>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <version>3.15.0</version>
+                <configuration>
+                    <release>21</release>
+                    <parameters>true</parameters>
+                </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <version>3.5.6</version>
+                <configuration>
+                    <excludes>
+                        <exclude>**/*IT.java</exclude>
+                    </excludes>
+                </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-failsafe-plugin</artifactId>
+                <version>3.5.6</version>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>integration-test</goal>
+                            <goal>verify</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-enforcer-plugin</artifactId>
+                <version>3.6.3</version>
+                <executions>
+                    <execution>
+                        <id>enforce-dependency-allowlist</id>
+                        <!-- default phase = validate, no override needed -->
+                        <goals>
+                            <goal>enforce</goal>
+                        </goals>
+                        <configuration>
+                            <rules>
+                                <bannedDependencies>
+                                    <!--
+                                        Strict ALLOWLIST, not a blocklist. logback-ntfy's entire promise
+                                        is "logback + JDK, nothing else" (plus its own test stack):
+                                        banning everything and re-allowing only the verified roster below
+                                        means any new dependency is a deliberate, visible diff that trips
+                                        this rule, instead of silently sailing through.
+
+                                        To safely extend this allowlist for a genuinely new, legitimate
+                                        dependency:
+                                          1. Re-read the README's "zero dependency beyond logback" promise
+                                             and confirm the new dependency doesn't break it. If it does,
+                                             don't add it here; reconsider the design instead.
+                                          2. Run `mvn dependency:tree` and add EVERY new direct + transitive
+                                             coordinate surfaced by the change, not just the one you added
+                                             by hand; transitives are exactly what this rule is designed to
+                                             catch.
+                                          3. Prefer a group-level wildcard (`groupId:*`) when a dependency
+                                             is a multi-artifact aggregator (see the org.junit.jupiter/
+                                             org.junit.platform entries below) so sibling artifacts under
+                                             the same groupId aren't missed.
+                                          4. Re-run `mvn validate` after editing and confirm BUILD SUCCESS
+                                             before committing.
+                                    -->
+                                    <searchTransitive>true</searchTransitive>
+                                    <excludes>
+                                        <exclude>*</exclude>
+                                    </excludes>
+                                    <includes>
+                                        <include>ch.qos.logback:logback-classic</include>
+                                        <include>ch.qos.logback:logback-core</include>
+                                        <include>org.slf4j:slf4j-api</include>
+                                        <include>org.junit.jupiter:*</include>
+                                        <include>org.junit.platform:*</include>
+                                        <include>org.opentest4j:opentest4j</include>
+                                        <include>org.apiguardian:apiguardian-api</include>
+                                        <include>org.jspecify:jspecify</include>
+                                        <include>org.assertj:assertj-core</include>
+                                        <include>net.bytebuddy:byte-buddy</include>
+                                        <include>org.wiremock:wiremock-standalone</include>
+                                    </includes>
+                                    <message>
+                                        logback-ntfy must stay zero-dependency beyond logback + JDK (plus
+                                        its test stack). See the allowlist comment above this rule before
+                                        adding anything here.
+                                    </message>
+                                </bannedDependencies>
+                            </rules>
+                            <fail>true</fail>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+</project>
