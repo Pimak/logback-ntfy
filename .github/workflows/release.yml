@@ -38,9 +38,29 @@ jobs:
           mkdir -p ~/.m2
           cp .github/release-settings.xml ~/.m2/settings.xml
 
+      # The repo's ./mvnw is Maven 4 (4.0.0-rc-5). central-publishing-maven-plugin 0.11.0 does NOT
+      # upload under Maven 4 — on `deploy` it stages the bundle to the local repo but its session
+      # upload hook never fires, so the build goes green without publishing (this bit 0.1.0/0.1.1).
+      # Pin Maven 3.9.x for the deploy legs. Checksum-verified download from the Apache archive.
+      - name: Set up Maven 3.9 for publishing
+        run: |
+          set -euo pipefail
+          MV=3.9.9
+          BASE="https://archive.apache.org/dist/maven/maven-3/${MV}/binaries/apache-maven-${MV}-bin.tar.gz"
+          curl -fsSL "$BASE" -o /tmp/maven.tar.gz
+          curl -fsSL "${BASE}.sha512" -o /tmp/maven.sha512
+          printf '%s  /tmp/maven.tar.gz\n' "$(cat /tmp/maven.sha512)" | sha512sum -c -
+          sudo tar -xzf /tmp/maven.tar.gz -C /opt
+          echo "/opt/apache-maven-${MV}/bin" >> "$GITHUB_PATH"
+
+      - name: Show Maven version (must be 3.9.x, not 4.x)
+        run: mvn --version
+
       # Step A — BLOCKING. No continue-on-error: a failed Central deploy MUST turn the job red.
+      # waitUntil=published (pom) makes this block until Central actually publishes, so a green run
+      # means the artifact is live — not merely staged.
       - name: Publish to Maven Central
-        run: ./mvnw --batch-mode -P release deploy
+        run: mvn --batch-mode -P release deploy
         env:
           MAVEN_CENTRAL_TOKEN_USERNAME: ${{ secrets.MAVEN_CENTRAL_TOKEN_USERNAME }}
           MAVEN_CENTRAL_TOKEN_PASSWORD: ${{ secrets.MAVEN_CENTRAL_TOKEN_PASSWORD }}
@@ -54,13 +74,17 @@ jobs:
       # can be observed on the first run rather than pre-solved.
       - name: Publish mirror to GitHub Packages
         continue-on-error: true
-        run: ./mvnw --batch-mode -P github-mirror deploy
+        run: mvn --batch-mode -P github-mirror deploy
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      # Extract the CHANGELOG section for the tag being released (v0.1.1 -> ## [0.1.1]). Dynamic,
+      # so future releases don't need this workflow edited.
       - name: Create GitHub Release
         run: |
-          NOTES=$(awk '/^## \[0.1.0\]/{flag=1;next}/^## \[/{flag=0}flag' CHANGELOG.md)
-          gh release create "${{ github.ref_name }}" --notes "$NOTES" --verify-tag
+          VERSION="${GITHUB_REF_NAME#v}"
+          NOTES=$(awk -v v="$VERSION" '$0 ~ "^## \\[" v "\\]" {flag=1; next} /^## \[/ {flag=0} flag' CHANGELOG.md)
+          gh release create "${GITHUB_REF_NAME}" --notes "$NOTES" --verify-tag
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REF_NAME: ${{ github.ref_name }}
