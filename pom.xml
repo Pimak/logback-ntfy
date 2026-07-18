@@ -195,6 +195,32 @@
                     <linkXRef>false</linkXRef>
                 </configuration>
             </plugin>
+            <!--
+                Central Portal publishing. MUST live in the main <build> (not a <profile>): a plugin
+                with extensions=true declared inside a profile registers its deploy-phase lifecycle
+                mapping (so artifacts get staged) but NOT its session-level upload participant — the
+                result is a bundle staged locally, BUILD SUCCESS, and nothing actually uploaded
+                (that false-positive is exactly what bit the 0.1.0 attempt). Placed here, the
+                extension loads at session start and the bundle is uploaded + published on `deploy`.
+                It is inert during plain `verify` (ci.yml), so day-to-day builds are untouched; the
+                signed sources/javadoc bundle only exists under `-P release`, so an accidental plain
+                `mvn deploy` uploads an incomplete bundle that Central rejects (fail-safe).
+            -->
+            <plugin>
+                <groupId>org.sonatype.central</groupId>
+                <artifactId>central-publishing-maven-plugin</artifactId>
+                <version>0.11.0</version>
+                <extensions>true</extensions>
+                <configuration>
+                    <!-- Server credentials (Central Portal user token) resolved from settings.xml <server id="central">. -->
+                    <publishingServerId>central</publishingServerId>
+                    <!-- D-01: a validation-passing bundle is published automatically on upload — no manual dashboard click. -->
+                    <autoPublish>true</autoPublish>
+                    <!-- Block the build until the deployment is actually PUBLISHED, so a validation
+                         failure turns CI red instead of leaving a green-but-unpublished false positive. -->
+                    <waitUntil>published</waitUntil>
+                </configuration>
+            </plugin>
         </plugins>
     </build>
 
@@ -272,20 +298,6 @@
                                 </configuration>
                             </execution>
                         </executions>
-                    </plugin>
-                    <plugin>
-                        <groupId>org.sonatype.central</groupId>
-                        <artifactId>central-publishing-maven-plugin</artifactId>
-                        <version>0.11.0</version>
-                        <!-- extensions=true wires this plugin in as the deploy handler for the Central Portal. -->
-                        <extensions>true</extensions>
-                        <configuration>
-                            <!-- Server credentials (Central Portal user token) resolved from settings.xml <server id="central">. -->
-                            <publishingServerId>central</publishingServerId>
-                            <!-- D-01: a validation-passing bundle is published automatically on upload — no manual
-                                 dashboard click. The tag push is the operator's point of no return. -->
-                            <autoPublish>true</autoPublish>
-                        </configuration>
                     </plugin>
                 </plugins>
             </build>
